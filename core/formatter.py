@@ -1,24 +1,17 @@
-def format_forecast_output(fusion_data):
+def summarize_fusion(result):
     """
-    Menyusun ringkasan prakiraan sederhana dari hasil fusion.
+    result: output dari get_fused_forecast
+    Returns a user-friendly dict summary.
     """
-    lokasi = fusion_data.get("lokasi", {})
-    adm = f"{lokasi.get('adm4', '')}, {lokasi.get('adm3', '')}, {lokasi.get('adm2', '')}"
-
-    bmkg = fusion_data.get("bmkg", {})
-    openmeteo = fusion_data.get("openmeteo", {})
-
-    summary = f"**Wilayah:** {adm}\n"
-
-    if "error" in bmkg:
-        summary += f"- BMKG: ❌ {bmkg['error']}\n"
+    used = result.get("used_source")
+    out = {"used_source": used}
+    if used == "bmkg":
+        out["note"] = "Menggunakan data dari BMKG (raw payload tersedia)."
+        out["raw"] = result.get("bmkg", {}).get("raw")
     else:
-        summary += f"- BMKG: ✅ Data tersedia\n"
-
-    if "error" in openmeteo:
-        summary += f"- Open-Meteo: ❌ {openmeteo['error']}\n"
-    else:
-        summary += f"- Open-Meteo: ✅ Data tersedia\n"
-
-    summary += "\nGabungan kedua sumber memberikan gambaran cuaca aktual untuk wilayah terkait."
-    return summary
+        out["note"] = f"Using Open-Meteo (fallback). Reason: {result.get('fallback_reason', 'default')}"
+        om = result.get("open_meteo", {})
+        out["current"] = om.get("current_weather")
+        out["daily"] = om.get("daily")
+        out["raw"] = om.get("raw")
+    return out
