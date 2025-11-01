@@ -1,20 +1,31 @@
 import pandas as pd
-from geopy.geocoders import Nominatim
 
-def get_location(nama_wilayah, csv_path="data/kode_wilayah_jatim.csv"):
-    df = pd.read_csv(csv_path)
-    match = df[df['nama'].str.lower().str.contains(nama_wilayah.lower(), na=False)]
-    if not match.empty:
-        row = match.iloc[0]
-        return {
-            "nama": row['nama'],
-            "lat": row.get('lat'),
-            "lon": row.get('lon')
-        }
+def load_village_data():
+    """
+    Load daftar desa/kecamatan/kabupaten beserta koordinatnya.
+    Ambil dari CSV publik di GitHub kamu.
+    """
+    url = "https://raw.githubusercontent.com/cklothoz79/kusuma-converter/main/kode_wilayah.csv"
+    df = pd.read_csv(url)
+    return df
 
-    geolocator = Nominatim(user_agent="meteo_fusion")
-    loc = geolocator.geocode(f"{nama_wilayah}, Jawa Timur, Indonesia")
-    if loc:
-        return {"nama": nama_wilayah, "lat": loc.latitude, "lon": loc.longitude}
-    else:
+def find_nearest_village(query):
+    """
+    Mencari nama desa/kecamatan yang paling cocok dengan input user.
+    """
+    df = load_village_data()
+    q = query.lower().strip()
+    match = df[df['nama_wilayah'].str.lower().str.contains(q)]
+
+    if match.empty:
         return None
+
+    row = match.iloc[0]
+    return {
+        "adm1": row.get("provinsi"),
+        "adm2": row.get("kabupaten"),
+        "adm3": row.get("kecamatan"),
+        "adm4": row.get("desa"),
+        "latitude": row.get("lat"),
+        "longitude": row.get("lon")
+    }
