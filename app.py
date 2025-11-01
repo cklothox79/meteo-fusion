@@ -1,9 +1,10 @@
 import streamlit as st
+import plotly.express as px
 from core.fusion_engine import get_fusion_forecast
 
 st.set_page_config(
     page_title="🌦️ Meteo Fusion – Prakiraan Cuaca Otomatis",
-    page_icon="🌦️",
+    page_icon="🌤️",
     layout="centered"
 )
 
@@ -29,6 +30,20 @@ if st.button("🔍 Cari Prakiraan"):
 
             st.markdown("### 🌧️ Ringkasan Cuaca")
             st.info(data["ringkasan"])
+
+            # --- tampilkan grafik tren
+            df = data.get("trend")
+            if df is not None and not df.empty:
+                st.markdown("### 📈 Tren Suhu & Curah Hujan (3 Hari ke Depan)")
+
+                fig1 = px.line(df, x="time", y="temperature", title="Tren Suhu (°C)")
+                fig1.update_traces(line=dict(width=3))
+                st.plotly_chart(fig1, use_container_width=True)
+
+                fig2 = px.bar(df, x="time", y="precipitation", title="Perkiraan Curah Hujan (mm)")
+                st.plotly_chart(fig2, use_container_width=True)
+            else:
+                st.warning("Data tren cuaca tidak tersedia dari Open-Meteo.")
 
             with st.expander("📊 Detail Data BMKG"):
                 st.json(data.get("bmkg", {}))
