@@ -1,31 +1,18 @@
-# core/location_resolver.py
-import pandas as pd
-from core.geocode_utils import get_coordinates
+from core.geocode_utils import find_nearest_village
 
-def resolve_location(query: str):
-    # Coba cari di file CSV lokal
-    url = "https://raw.githubusercontent.com/cklothoz79/kusuma-converter/main/kode_wilayah.csv"
-    df = pd.read_csv(url)
-    result = df[df['nama'].str.contains(query, case=False, na=False)]
-
-    if not result.empty:
-        row = result.iloc[0]
+def resolve_location(query):
+    """
+    Mengubah nama wilayah menjadi koordinat + struktur administrasi.
+    """
+    lokasi = find_nearest_village(query)
+    if lokasi:
+        return lokasi
+    else:
         return {
-            "adm1": row.get("provinsi", ""),
-            "adm2": row.get("kabupaten", ""),
-            "adm3": row.get("kecamatan", ""),
-            "adm4": row.get("desa", ""),
-            "latitude": row.get("latitude", ""),
-            "longitude": row.get("longitude", "")
+            "adm1": None,
+            "adm2": None,
+            "adm3": None,
+            "adm4": query,
+            "latitude": None,
+            "longitude": None
         }
-    
-    # Jika tidak ditemukan di CSV, fallback ke API geocode
-    lat, lon = get_coordinates(query)
-    return {
-        "adm1": "",
-        "adm2": "",
-        "adm3": "",
-        "adm4": query,
-        "latitude": lat,
-        "longitude": lon
-    }
