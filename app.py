@@ -1,4 +1,3 @@
-# app.py
 import streamlit as st
 from core.fusion_engine import get_fusion_forecast
 
