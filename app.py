@@ -1,107 +1,56 @@
-# ============================================================
-# 🌦️ Meteo Fusion – Prakiraan Cuaca Otomatis Jawa Timur
-# ============================================================
-
-import os
-import subprocess
 import streamlit as st
-from core.fusion_engine import get_fusion_forecast
+from core.location_resolver import find_location, LocationNotFound
+from core.fusion_engine import get_fused_forecast
+from core.formatter import summarize_fusion
+import plotly.graph_objs as go
 
-# ============================================================
-# 1️⃣ Setup Awal & Cek File Data
-# ============================================================
+st.set_page_config(page_title="Meteo Fusion - Jawa Timur", layout="centered")
 
-DATA_PATH = "data/Village_LongLat_Approx.csv"
-st.set_page_config(page_title="Meteo Fusion – Jawa Timur", page_icon="🌦️", layout="wide")
+st.title("🌦️ Meteo Fusion — Prakiraan Cuaca (Jawa Timur)")
+st.markdown("Fusion data: BMKG (opsional) + Open-Meteo (fallback). Masukkan nama desa/kecamatan/kabupaten di Jawa Timur:")
 
-st.title("🌦️ Meteo Fusion – Prakiraan Cuaca Otomatis Jawa Timur")
-st.caption("Fusion data BMKG + Open-Meteo untuk wilayah administratif Jawa Timur")
+loc_query = st.text_input("Nama desa / kecamatan / kabupaten", value="", placeholder="mis. simogirang")
+use_bmkg = st.checkbox("Prefer gunakan BMKG jika tersedia (butuh konfigurasi BMKG_BASE_URL)", value=True)
 
-# Cek apakah file data koordinat sudah tersedia
-if not os.path.exists(DATA_PATH):
-    st.warning("⚠️ File `Village_LongLat_Approx.csv` belum tersedia. "
-               "Kamu bisa buat otomatis dengan tombol di bawah.")
-
-    if st.button("⚙️ Generate File Koordinat (Jawa Timur)"):
-        with st.spinner("Sedang membuat file koordinat, mohon tunggu..."):
-            try:
-                subprocess.run(["python", "generate_village_csv.py"], check=True)
-                st.success("✅ File `Village_LongLat_Approx.csv` berhasil dibuat!")
-            except Exception as e:
-                st.error(f"Gagal membuat file CSV otomatis: {e}")
-    st.stop()
-else:
-    st.success("✅ File `Village_LongLat_Approx.csv` siap digunakan.")
-
-# ============================================================
-# 2️⃣ Input Lokasi Pengguna
-# ============================================================
-
-query = st.text_input(
-    "🗺️ Masukkan nama **desa/kecamatan/kabupaten** di Jawa Timur:",
-    placeholder="Contoh: Simogirang atau Prambon",
-)
-
-if not query:
-    st.info("Silakan ketik nama wilayah untuk menampilkan prakiraan cuaca.")
-    st.stop()
-
-# ============================================================
-# 3️⃣ Proses Fusion Data Cuaca
-# ============================================================
-
-with st.spinner("🔄 Mengambil data cuaca gabungan dari BMKG + Open-Meteo..."):
-    try:
-        data = get_fusion_forecast(query)
-        if data is None:
-            st.error("❌ Data tidak ditemukan untuk wilayah tersebut.")
-            st.stop()
-    except Exception as e:
-        st.error(f"Gagal memproses data fusion: {e}")
-        st.stop()
-
-# ============================================================
-# 4️⃣ Tampilkan Hasil
-# ============================================================
-
-st.subheader(f"🌍 Hasil Prakiraan untuk: {data.get('lokasi', 'Wilayah Tidak Dikenal')}")
-st.write(f"Koordinat: `{data.get('lat')}, {data.get('lon')}`")
-
-# Cuaca utama
-col1, col2, col3 = st.columns(3)
-with col1:
-    st.metric("Suhu (°C)", data.get("temperature"))
-with col2:
-    st.metric("Kelembapan (%)", data.get("humidity"))
-with col3:
-    st.metric("Curah Hujan (mm)", data.get("rain"))
-
-st.divider()
-
-# ============================================================
-# 5️⃣ Visualisasi & Dinamika Atmosfer
-# ============================================================
-
-st.markdown("### 📈 Dinamika Atmosfer (Grafik 24 jam ke depan)")
-try:
-    import plotly.express as px
-    import pandas as pd
-
-    df = data.get("timeseries")
-    if isinstance(df, list):
-        df = pd.DataFrame(df)
-
-    if not df.empty:
-        fig = px.line(df, x="time", y="temperature", title="Perubahan Suhu (°C)", markers=True)
-        st.plotly_chart(fig, use_container_width=True)
-
-        fig2 = px.bar(df, x="time", y="rain", title="Curah Hujan (mm)")
-        st.plotly_chart(fig2, use_container_width=True)
+if st.button("Dapatkan Prakiraan"):
+    if not loc_query.strip():
+        st.error("Masukkan nama lokasi dulu.")
     else:
-        st.info("Tidak ada data timeseries tersedia.")
-except Exception as e:
-    st.warning(f"Tidak bisa menampilkan grafik: {e}")
-
-st.divider()
-
-st.caption("© 2025 Meteo Fusion | BMKG + Open-Meteo | Prototype by Ferri Kusuma & ChatGPT")
+        try:
+            name, lat, lon = find_location(loc_query)
+            st.success(f"Lokasi ditemukan: **{name}** → lat={lat:.5f}, lon={lon:.5f}")
+            st.map({"lat": [lat], "lon": [lon]})
+            # Fetch fused forecast
+            with st.spinner("Mengambil data prakiraan..."):
+                fused = get_fused_forecast(lat, lon, prefer_bmkg=use_bmkg)
+            summary = summarize_fusion(fused)
+            st.subheader("Ringkasan Sumber Data")
+            st.write(summary["note"])
+            st.write(f"Used source: **{summary['used_source']}**")
+            if summary["used_source"] == "open-meteo":
+                current = summary.get("current")
+                if current:
+                    st.markdown("### Cuaca Saat Ini")
+                    st.write(current)
+                daily = summary.get("daily")
+                if daily:
+                    st.markdown("### Prakiraan Harian (Ringkasan)")
+                    # daily usually has arrays: time, temperature_2m_max, temperature_2m_min, precipitation_sum, weathercode
+                    import pandas as pd
+                    df_daily = pd.DataFrame(daily)
+                    st.dataframe(df_daily)
+                    # plot max/min temp if present
+                    if "temperature_2m_max" in df_daily.columns and "temperature_2m_min" in df_daily.columns:
+                        fig = go.Figure()
+                        fig.add_trace(go.Scatter(x=df_daily["time"], y=df_daily["temperature_2m_max"], name="Max"))
+                        fig.add_trace(go.Scatter(x=df_daily["time"], y=df_daily["temperature_2m_min"], name="Min"))
+                        fig.update_layout(title="Temperature (daily)", xaxis_title="Date", yaxis_title="°C")
+                        st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.markdown("### Data BMKG (raw)")
+                st.json(summary.get("raw"))
+        except LocationNotFound as e:
+            st.error(str(e))
+        except Exception as e:
+            st.error(f"Gagal memproses: {e}")
+            st.exception(e)
